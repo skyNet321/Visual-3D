@@ -1,4 +1,5 @@
 ﻿import type { ColorPreset } from "@/types/colors";
+import type { EnvironmentLight } from "@/types/environment";
 import type { Point2D, Quad } from "@/types/geometry";
 import type { OpeningPreviewState } from "@/types/openingPreview";
 import type { ProductTemplate } from "@/types/products";
@@ -12,6 +13,11 @@ interface OverlayRenderOptions {
   color: ColorPreset;
   opacity?: number;
   openingPreview?: OpeningPreviewState;
+  environmentLight?: EnvironmentLight;
+}
+
+function clamp(value: number, min: number, max: number) {
+  return Math.min(max, Math.max(min, value));
 }
 
 function drawPolygon(context: CanvasRenderingContext2D, points: Point2D[]) {
@@ -23,7 +29,11 @@ function drawPolygon(context: CanvasRenderingContext2D, points: Point2D[]) {
   context.closePath();
 }
 
-function fillPolygon(context: CanvasRenderingContext2D, points: Point2D[], fillStyle: string | CanvasGradient) {
+function fillPolygon(
+  context: CanvasRenderingContext2D,
+  points: Point2D[],
+  fillStyle: string | CanvasGradient,
+) {
   drawPolygon(context, points);
   context.fillStyle = fillStyle;
   context.fill();
@@ -114,46 +124,36 @@ function transformHingedPolygon(
   progress: number,
 ): Point2D[] {
   const [tl, tr, br, bl] = points;
-  const t = Math.max(0, Math.min(progress, 1));
-
-  const leftAnchorTop = tl;
-  const leftAnchorBottom = bl;
-  const rightAnchorTop = tr;
-  const rightAnchorBottom = br;
+  const t = clamp(progress, 0, 1);
 
   const sideVector = normalize(pointSub(bl, tl));
   const normal = { x: sideVector.y, y: -sideVector.x };
 
   const depth = Math.hypot(tr.x - tl.x, tr.y - tl.y) * (0.18 * t);
-  const squash = 0.64 * t;
+  const squash = 0.62 * t;
 
   if (hingeSide === "left") {
     const movedTop = pointAdd(pointLerp(tr, tl, squash), pointScale(normal, depth));
     const movedBottom = pointAdd(pointLerp(br, bl, squash), pointScale(normal, depth));
-    return [leftAnchorTop, movedTop, movedBottom, leftAnchorBottom];
+    return [tl, movedTop, movedBottom, bl];
   }
 
   const movedTop = pointAdd(pointLerp(tl, tr, squash), pointScale(normal, -depth));
   const movedBottom = pointAdd(pointLerp(bl, br, squash), pointScale(normal, -depth));
-  return [movedTop, rightAnchorTop, rightAnchorBottom, movedBottom];
+  return [movedTop, tr, br, movedBottom];
 }
 
 function transformTiltPolygon(points: Point2D[], progress: number): Point2D[] {
   const [tl, tr, br, bl] = points;
-  const t = Math.max(0, Math.min(progress, 1));
+  const t = clamp(progress, 0, 1);
 
   const center = midpoint(midpoint(tl, tr), midpoint(bl, br));
-  const downLeft = pointLerp(tl, bl, 0.24 * t);
-  const downRight = pointLerp(tr, br, 0.24 * t);
+  const loweredLeft = pointLerp(tl, bl, 0.24 * t);
+  const loweredRight = pointLerp(tr, br, 0.24 * t);
 
-  const pullToCenter = (point: Point2D) => pointLerp(point, center, 0.07 * t);
+  const soften = (point: Point2D) => pointLerp(point, center, 0.08 * t);
 
-  return [
-    pullToCenter(downLeft),
-    pullToCenter(downRight),
-    br,
-    bl,
-  ];
+  return [soften(loweredLeft), soften(loweredRight), br, bl];
 }
 
 function transformSlidingPolygon(
@@ -162,10 +162,9 @@ function transformSlidingPolygon(
   progress: number,
 ): Point2D[] {
   const [tl, tr] = points;
-  const t = Math.max(0, Math.min(progress, 1));
   const axis = normalize(pointSub(tr, tl));
   const width = Math.hypot(tr.x - tl.x, tr.y - tl.y);
-  const delta = pointScale(axis, direction * width * t * 0.62);
+  const delta = pointScale(axis, direction * width * clamp(progress, 0, 1) * 0.64);
   return shiftPolygon(points, delta);
 }
 
@@ -186,11 +185,11 @@ function openingPanelIndexes(
     return new Set<number>();
   }
 
-  const count = Math.max(1, Math.min(openingPreview.openingPanels, candidates.length));
+  const count = clamp(openingPreview.openingPanels, 1, candidates.length);
 
   if (openingPreview.mode === "double" && candidates.length >= 2) {
-    const pair = [candidates[0], candidates[candidates.length - 1]];
-    return new Set<number>(pair.slice(0, count));
+    const pair = [candidates[0], candidates[candidates.length - 1]].slice(0, count);
+    return new Set<number>(pair);
   }
 
   return new Set<number>(candidates.slice(0, count));
@@ -206,12 +205,7 @@ function drawFrameSegment(
   const outerMid = midpoint(points[0], points[1]);
   const innerMid = midpoint(points[2], points[3]);
 
-  const gradient = context.createLinearGradient(
-    outerMid.x,
-    outerMid.y,
-    innerMid.x,
-    innerMid.y,
-  );
+  const gradient = context.createLinearGradient(outerMid.x, outerMid.y, innerMid.x, innerMid.y);
   gradient.addColorStop(0, outerColor);
   gradient.addColorStop(1, innerColor);
 
@@ -228,11 +222,11 @@ function drawPanelHandle(
   lineWidth: number,
 ) {
   const [tl, tr, br, bl] = points;
-  const nearTop = hingeSide === "left" ? pointLerp(tr, tl, 0.1) : pointLerp(tl, tr, 0.1);
-  const nearBottom = hingeSide === "left" ? pointLerp(br, bl, 0.1) : pointLerp(bl, br, 0.1);
+  const sideA = hingeSide === "left" ? tr : tl;
+  const sideB = hingeSide === "left" ? br : bl;
 
-  const handleTop = pointLerp(nearTop, nearBottom, 0.36);
-  const handleBottom = pointLerp(nearTop, nearBottom, 0.64);
+  const handleTop = pointLerp(sideA, sideB, 0.36);
+  const handleBottom = pointLerp(sideA, sideB, 0.64);
 
   const metallic = context.createLinearGradient(
     handleTop.x,
@@ -254,11 +248,6 @@ function drawPanelHandle(
   context.shadowColor = "rgba(0, 0, 0, 0.45)";
   context.shadowBlur = Math.max(2, lineWidth * 0.8);
   context.stroke();
-
-  context.beginPath();
-  context.arc((handleTop.x + handleBottom.x) / 2, handleBottom.y, lineWidth * 0.32, 0, Math.PI * 2);
-  context.fillStyle = "rgba(227, 235, 243, 0.94)";
-  context.fill();
   context.restore();
 }
 
@@ -266,10 +255,15 @@ function drawGlass(
   context: CanvasRenderingContext2D,
   polygon: Point2D[],
   glassOpacity: number,
+  environment: EnvironmentLight,
 ) {
   const bounds = polygonBounds(polygon);
   const width = Math.max(1, bounds.maxX - bounds.minX);
   const height = Math.max(1, bounds.maxY - bounds.minY);
+
+  const luma = environment.luma;
+  const direction = environment.direction;
+  const warmth = environment.warmth;
 
   context.save();
   drawPolygon(context, polygon);
@@ -281,49 +275,50 @@ function drawGlass(
     bounds.maxX,
     bounds.maxY,
   );
-  baseGradient.addColorStop(0, `rgba(188, 218, 244, ${glassOpacity + 0.16})`);
-  baseGradient.addColorStop(0.45, `rgba(141, 184, 216, ${glassOpacity + 0.08})`);
-  baseGradient.addColorStop(1, `rgba(97, 139, 170, ${glassOpacity - 0.02})`);
+  const blueBias = clamp(0.74 - warmth * 0.1 + (1 - luma) * 0.08, 0.6, 0.9);
+  baseGradient.addColorStop(0, `rgba(186, 216, 242, ${glassOpacity + 0.12})`);
+  baseGradient.addColorStop(0.5, `rgba(${Math.round(105 * blueBias)}, ${Math.round(147 * blueBias)}, ${Math.round(183 * blueBias)}, ${glassOpacity + 0.02})`);
+  baseGradient.addColorStop(1, `rgba(58, 92, 122, ${glassOpacity - 0.03})`);
 
   context.fillStyle = baseGradient;
   context.fillRect(bounds.minX, bounds.minY, width, height);
 
+  const reflFromLeft = direction <= 0;
   const reflection = context.createLinearGradient(
-    bounds.minX,
+    reflFromLeft ? bounds.minX : bounds.maxX,
     bounds.minY,
-    bounds.maxX,
-    bounds.minY + height * 0.45,
+    reflFromLeft ? bounds.maxX : bounds.minX,
+    bounds.minY + height * (0.42 + Math.abs(direction) * 0.16),
   );
-  reflection.addColorStop(0, "rgba(255, 255, 255, 0.44)");
-  reflection.addColorStop(0.34, "rgba(255, 255, 255, 0.18)");
+
+  const reflAlpha = clamp(0.22 + luma * 0.24 + (1 - environment.contrast) * 0.08, 0.2, 0.56);
+  reflection.addColorStop(0, `rgba(255, 255, 255, ${reflAlpha})`);
+  reflection.addColorStop(0.36, `rgba(255, 255, 255, ${reflAlpha * 0.45})`);
   reflection.addColorStop(1, "rgba(255, 255, 255, 0.02)");
 
   context.fillStyle = reflection;
-  context.fillRect(bounds.minX, bounds.minY, width, height * 0.6);
+  context.fillRect(bounds.minX, bounds.minY, width, height * 0.72);
 
-  context.globalAlpha = 0.18;
-  for (let index = 0; index < 4; index += 1) {
-    const streakX = bounds.minX + width * (0.12 + index * 0.22);
-    const streak = context.createLinearGradient(
-      streakX,
-      bounds.minY,
-      streakX + width * 0.1,
-      bounds.maxY,
-    );
-    streak.addColorStop(0, "rgba(255, 255, 255, 0.7)");
+  context.globalAlpha = 0.12 + Math.abs(direction) * 0.08;
+  for (let index = 0; index < 3; index += 1) {
+    const factor = index / 3;
+    const x = bounds.minX + width * (0.16 + factor * 0.28);
+    const streak = context.createLinearGradient(x, bounds.minY, x + width * 0.1, bounds.maxY);
+    streak.addColorStop(0, "rgba(255, 255, 255, 0.6)");
     streak.addColorStop(1, "rgba(255, 255, 255, 0)");
     context.fillStyle = streak;
-    context.fillRect(streakX, bounds.minY, width * 0.1, height);
+    context.fillRect(x, bounds.minY, width * 0.1, height);
   }
 
   context.restore();
 }
 
-function drawWoodTexture(
-  context: CanvasRenderingContext2D,
-  polygon: Point2D[],
-  density: number,
-) {
+function seededNoise(seed: number) {
+  const x = Math.sin(seed * 128.53) * 43758.5453;
+  return x - Math.floor(x);
+}
+
+function drawWoodTexture(context: CanvasRenderingContext2D, polygon: Point2D[], density: number) {
   const bounds = polygonBounds(polygon);
   const width = bounds.maxX - bounds.minX;
 
@@ -351,40 +346,41 @@ function drawMicroTexture(
   context: CanvasRenderingContext2D,
   polygon: Point2D[],
   intensity: number,
+  stableSeed: number,
 ) {
   const bounds = polygonBounds(polygon);
   const width = Math.max(1, bounds.maxX - bounds.minX);
   const height = Math.max(1, bounds.maxY - bounds.minY);
-  const dots = Math.max(120, Math.round((width * height) / 180));
+  const dots = Math.max(120, Math.round((width * height) / 220));
 
   context.save();
   drawPolygon(context, polygon);
   context.clip();
 
   for (let index = 0; index < dots; index += 1) {
-    const x = bounds.minX + Math.random() * width;
-    const y = bounds.minY + Math.random() * height;
-    const radius = Math.random() > 0.86 ? 0.9 : 0.55;
-    const alpha = (0.015 + Math.random() * 0.03) * intensity;
+    const nx = seededNoise(stableSeed + index * 1.73);
+    const ny = seededNoise(stableSeed + index * 2.97);
+    const nr = seededNoise(stableSeed + index * 5.11);
+
+    const x = bounds.minX + nx * width;
+    const y = bounds.minY + ny * height;
+    const radius = nr > 0.84 ? 0.82 : 0.5;
+    const alpha = (0.012 + nr * 0.03) * intensity;
 
     context.beginPath();
     context.arc(x, y, radius, 0, Math.PI * 2);
-    context.fillStyle = `rgba(15, 19, 27, ${alpha})`;
+    context.fillStyle = `rgba(14, 18, 25, ${alpha})`;
     context.fill();
   }
 
   context.restore();
 }
 
-function drawGasket(
-  context: CanvasRenderingContext2D,
-  polygon: Point2D[],
-  width: number,
-) {
+function drawGasket(context: CanvasRenderingContext2D, polygon: Point2D[], width: number) {
   context.save();
   drawPolygon(context, polygon);
   context.lineWidth = width;
-  context.strokeStyle = "rgba(22, 28, 36, 0.68)";
+  context.strokeStyle = "rgba(20, 26, 33, 0.68)";
   context.stroke();
 
   context.lineWidth = Math.max(0.4, width * 0.38);
@@ -393,14 +389,26 @@ function drawGasket(
   context.restore();
 }
 
+function withAdaptiveShade(base: string, amount: number) {
+  return shadeHex(base, clamp(amount, -0.65, 0.65));
+}
+
 export function renderOverlay({
   context,
   quad,
   template,
   color,
-  opacity = 0.94,
+  opacity = 0.95,
   openingPreview,
+  environmentLight,
 }: OverlayRenderOptions) {
+  const environment: EnvironmentLight = environmentLight ?? {
+    luma: 0.56,
+    contrast: 0.3,
+    direction: 0,
+    warmth: 0.5,
+  };
+
   const avgEdge = averageEdgeLength(quad);
   const frameStroke = Math.max(1.5, Math.min(8, avgEdge * 0.012));
   const outer = panelPolygon(quad, 0, 1, 0, 1);
@@ -412,24 +420,32 @@ export function renderOverlay({
   const innerBottom = 1 - frame;
   const inner = panelPolygon(quad, innerLeft, innerRight, innerTop, innerBottom);
 
-  const frameDark = shadeHex(color.hex, -0.26);
-  const frameMedium = shadeHex(color.hex, -0.1);
-  const frameLight = shadeHex(color.hex, 0.14);
-  const frameHighlight = shadeHex(color.accentHex, 0.3);
+  const luma = environment.luma;
+  const contrast = environment.contrast;
+  const direction = environment.direction;
+
+  const lightBoost = clamp(0.08 + luma * 0.22 + (1 - contrast) * 0.1, 0.08, 0.38);
+  const darkBoost = clamp(0.12 + (1 - luma) * 0.26 + contrast * 0.16, 0.1, 0.44);
+
+  const frameDark = withAdaptiveShade(color.hex, -darkBoost);
+  const frameMedium = withAdaptiveShade(color.hex, -darkBoost * 0.38);
+  const frameLight = withAdaptiveShade(color.hex, lightBoost);
+  const frameHighlight = withAdaptiveShade(color.accentHex, lightBoost + 0.12);
 
   const openingIndexes = openingPanelIndexes(template, openingPreview);
-  const progress = Math.max(0, Math.min(openingPreview?.progress ?? 0, 1));
+  const progress = clamp(openingPreview?.progress ?? 0, 0, 1);
 
   context.save();
   context.globalAlpha = opacity;
 
   context.save();
   drawPolygon(context, outer);
-  context.shadowColor = "rgba(0, 0, 0, 0.45)";
-  context.shadowBlur = Math.max(12, avgEdge * 0.06);
-  context.shadowOffsetX = Math.max(2, avgEdge * 0.008);
-  context.shadowOffsetY = Math.max(4, avgEdge * 0.016);
-  context.fillStyle = "rgba(12, 17, 24, 0.22)";
+  const shadowStrength = clamp(0.2 + (1 - luma) * 0.3 + contrast * 0.12, 0.16, 0.52);
+  context.shadowColor = `rgba(0, 0, 0, ${shadowStrength})`;
+  context.shadowBlur = Math.max(12, avgEdge * (0.05 + contrast * 0.03));
+  context.shadowOffsetX = Math.max(1, avgEdge * (0.008 + direction * 0.004));
+  context.shadowOffsetY = Math.max(3, avgEdge * 0.014);
+  context.fillStyle = "rgba(10, 16, 24, 0.2)";
   context.fill();
   context.restore();
 
@@ -440,14 +456,20 @@ export function renderOverlay({
   const bottomStrip = [outer[2], outer[3], inner[3], inner[2]];
   const leftStrip = [outer[3], outer[0], inner[0], inner[3]];
 
+  const leftLight = clamp(lightBoost + direction * -0.12, 0.04, 0.42);
+  const rightLight = clamp(lightBoost + direction * 0.12, 0.04, 0.42);
+
   drawFrameSegment(context, topStrip, frameLight, frameMedium, 0.96);
-  drawFrameSegment(context, leftStrip, frameLight, frameMedium, 0.92);
+  drawFrameSegment(context, leftStrip, withAdaptiveShade(color.hex, leftLight), frameMedium, 0.92);
   drawFrameSegment(context, bottomStrip, frameMedium, frameDark, 0.95);
-  drawFrameSegment(context, rightStrip, frameMedium, frameDark, 0.95);
+  drawFrameSegment(context, rightStrip, withAdaptiveShade(color.hex, rightLight), frameDark, 0.95);
 
   context.save();
   drawPolygon(context, inner);
-  context.fillStyle = "rgba(45, 66, 88, 0.2)";
+  const cavity = context.createLinearGradient(inner[0].x, inner[0].y, inner[2].x, inner[2].y);
+  cavity.addColorStop(0, "rgba(64, 88, 111, 0.22)");
+  cavity.addColorStop(1, "rgba(16, 24, 33, 0.3)");
+  context.fillStyle = cavity;
   context.fill();
   context.lineWidth = Math.max(1.2, frameStroke * 0.35);
   context.strokeStyle = "rgba(6, 10, 16, 0.3)";
@@ -464,30 +486,32 @@ export function renderOverlay({
     const left = offset;
     const right = offset + panelWidth;
 
+    const panelInset = Math.max(0.012, mullion * 0.45);
+
     let panelOuter = panelPolygon(quad, left, right, innerTop, innerBottom);
     let panelInner = panelPolygon(
       quad,
-      left + Math.max(0.012, mullion * 0.45),
-      right - Math.max(0.012, mullion * 0.45),
-      innerTop + Math.max(0.012, mullion * 0.45),
-      innerBottom - Math.max(0.012, mullion * 0.45),
+      left + panelInset,
+      right - panelInset,
+      innerTop + panelInset,
+      innerBottom - panelInset,
     );
     let glassArea = panelPolygon(
       quad,
-      left + Math.max(0.012, mullion * 0.5),
-      right - Math.max(0.012, mullion * 0.5),
-      innerTop + Math.max(0.012, mullion * 0.5),
-      innerBottom - Math.max(0.012, mullion * 0.5),
+      left + panelInset * 1.08,
+      right - panelInset * 1.08,
+      innerTop + panelInset * 1.08,
+      innerBottom - panelInset * 1.08,
     );
 
     const animated = openingIndexes.has(index) && panel.kind !== "fixed";
 
     if (animated && openingPreview?.enabled) {
       if (openingPreview.mode === "slide") {
-        const direction = panel.slideDirection === "left" ? -1 : panel.slideDirection === "right" ? 1 : index % 2 === 0 ? 1 : -1;
-        panelOuter = transformSlidingPolygon(panelOuter, direction, progress);
-        panelInner = transformSlidingPolygon(panelInner, direction, progress);
-        glassArea = transformSlidingPolygon(glassArea, direction, progress);
+        const directionSign = panel.slideDirection === "left" ? -1 : panel.slideDirection === "right" ? 1 : index % 2 === 0 ? 1 : -1;
+        panelOuter = transformSlidingPolygon(panelOuter, directionSign, progress);
+        panelInner = transformSlidingPolygon(panelInner, directionSign, progress);
+        glassArea = transformSlidingPolygon(glassArea, directionSign, progress);
       } else if (openingPreview.mode === "tilt") {
         panelOuter = transformTiltPolygon(panelOuter, progress);
         panelInner = transformTiltPolygon(panelInner, progress);
@@ -499,15 +523,16 @@ export function renderOverlay({
               ? "left"
               : "right"
             : panel.hingeSide ?? "left";
+
         panelOuter = transformHingedPolygon(panelOuter, hinge, progress);
         panelInner = transformHingedPolygon(panelInner, hinge, progress);
         glassArea = transformHingedPolygon(glassArea, hinge, progress);
       }
 
       context.save();
-      const shadowOffset = pointScale(normalize(pointSub(panelOuter[3], panelOuter[0])), 6 * progress);
+      const shadowOffset = pointScale(normalize(pointSub(panelOuter[3], panelOuter[0])), 6.8 * progress);
       const shadowPoly = shiftPolygon(panelOuter, shadowOffset);
-      fillPolygon(context, shadowPoly, "rgba(3, 7, 12, 0.22)");
+      fillPolygon(context, shadowPoly, `rgba(2, 5, 10, ${0.16 + 0.16 * progress})`);
       context.restore();
     }
 
@@ -521,7 +546,7 @@ export function renderOverlay({
     drawFrameSegment(context, panelBottom, frameMedium, frameDark, 0.95);
     drawFrameSegment(context, panelRight, frameMedium, frameDark, 0.95);
 
-    drawGlass(context, glassArea, template.frameStyle.glassOpacity);
+    drawGlass(context, glassArea, template.frameStyle.glassOpacity, environment);
     drawGasket(context, glassArea, Math.max(0.9, frameStroke * 0.22));
 
     context.save();
@@ -536,7 +561,7 @@ export function renderOverlay({
         context,
         panelInner,
         panel.hingeSide ?? "left",
-        Math.max(2, frameStroke * 0.52),
+        Math.max(2, frameStroke * 0.5),
       );
     }
 
@@ -571,14 +596,10 @@ export function renderOverlay({
         innerTop,
         innerBottom,
       );
+
       drawFrameSegment(
         context,
-        [
-          mullionStrip[0],
-          mullionStrip[1],
-          mullionStrip[2],
-          mullionStrip[3],
-        ],
+        [mullionStrip[0], mullionStrip[1], mullionStrip[2], mullionStrip[3]],
         frameLight,
         frameDark,
         0.95,
@@ -586,8 +607,13 @@ export function renderOverlay({
     }
   }
 
+  const stableSeed =
+    (Math.round(outer[0].x + outer[1].y + outer[2].x) * 0.017 +
+      Math.round(outer[3].y) * 0.009) %
+    1000;
+
   if (color.id === "white" || color.id === "anthracite") {
-    drawMicroTexture(context, outer, color.id === "white" ? 0.6 : 0.9);
+    drawMicroTexture(context, outer, color.id === "white" ? 0.58 : 0.86, stableSeed);
   }
 
   if (color.id === "walnut" || color.id === "golden-oak" || color.id === "dark-oak") {
@@ -596,7 +622,7 @@ export function renderOverlay({
 
   drawPolygon(context, outer);
   context.lineWidth = frameStroke;
-  context.strokeStyle = "rgba(248, 252, 255, 0.5)";
+  context.strokeStyle = "rgba(248, 252, 255, 0.48)";
   context.stroke();
 
   context.restore();

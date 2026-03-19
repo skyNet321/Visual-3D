@@ -4,6 +4,7 @@ import Image from "next/image";
 import type { RefObject } from "react";
 import type { CameraStatus } from "@/hooks/useCamera";
 import type { ColorPreset } from "@/types/colors";
+import type { EnvironmentLight } from "@/types/environment";
 import type { Quad } from "@/types/geometry";
 import type { OpeningPreviewState } from "@/types/openingPreview";
 import type { ProductTemplate } from "@/types/products";
@@ -21,6 +22,7 @@ interface CameraStageProps {
   template: ProductTemplate;
   color: ColorPreset;
   quad: Quad | null;
+  environmentLight: EnvironmentLight;
   openingPreview: OpeningPreviewState;
   showOverlay: boolean;
   cornerEditMode: boolean;
@@ -63,6 +65,7 @@ export function CameraStage({
   template,
   color,
   quad,
+  environmentLight,
   openingPreview,
   showOverlay,
   cornerEditMode,
@@ -118,6 +121,7 @@ export function CameraStage({
           quad={quad}
           template={template}
           color={color}
+          environmentLight={environmentLight}
           openingPreview={openingPreview}
           hidden={!showOverlay}
         />

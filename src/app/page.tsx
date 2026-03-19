@@ -10,6 +10,7 @@ import {
 import { LeadFormSheet } from "@/components/lead/LeadFormSheet";
 import { Opening3DModal } from "@/components/three/Opening3DModal";
 import { useCamera } from "@/hooks/useCamera";
+import { useEnvironmentLight } from "@/hooks/useEnvironmentLight";
 import { useIsMobileDevice } from "@/hooks/useIsMobileDevice";
 import { useLeadSubmission } from "@/hooks/useLeadSubmission";
 import { useOverlayEditor } from "@/hooks/useOverlayEditor";
@@ -70,6 +71,12 @@ export default function HomePage() {
   });
 
   const { videoRef, status: cameraStatus, error: cameraError, startCamera } = useCamera();
+  const [basePhotoDataUrl, setBasePhotoDataUrl] = useState<string | null>(null);
+  const environmentLight = useEnvironmentLight({
+    videoRef,
+    basePhotoDataUrl,
+    enabled: cameraStatus === "ready" || Boolean(basePhotoDataUrl),
+  });
   const { state: leadState, error: leadError, submitLead } = useLeadSubmission();
 
   const [selectedCategory, setSelectedCategory] = useState<ProductCategory>("windows");
@@ -81,7 +88,6 @@ export default function HomePage() {
   const [beforeMode, setBeforeMode] = useState(false);
   const [viewport, setViewport] = useState<ViewportSize>({ width: 0, height: 0 });
 
-  const [basePhotoDataUrl, setBasePhotoDataUrl] = useState<string | null>(null);
   const [capturedPreview, setCapturedPreview] = useState<string | null>(null);
   const [infoMessage, setInfoMessage] = useState<string | null>(null);
 
@@ -359,6 +365,7 @@ export default function HomePage() {
         template={selectedTemplate}
         color={selectedColor}
         quad={activeQuad}
+        environmentLight={environmentLight}
         openingPreview={openingPreviewState}
         showOverlay={!beforeMode}
         cornerEditMode={cornerEditMode}
