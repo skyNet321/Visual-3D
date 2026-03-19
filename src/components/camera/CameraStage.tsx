@@ -25,6 +25,7 @@ interface CameraStageProps {
   environmentLight: EnvironmentLight;
   openingPreview: OpeningPreviewState;
   showOverlay: boolean;
+  overlayOpacity?: number;
   cornerEditMode: boolean;
   activeCorner: number | null;
   bindings: PointerBindings;
@@ -68,6 +69,7 @@ export function CameraStage({
   environmentLight,
   openingPreview,
   showOverlay,
+  overlayOpacity = 0.95,
   cornerEditMode,
   activeCorner,
   bindings,
@@ -121,6 +123,7 @@ export function CameraStage({
           quad={quad}
           template={template}
           color={color}
+          opacity={overlayOpacity}
           environmentLight={environmentLight}
           openingPreview={openingPreview}
           hidden={!showOverlay}
@@ -128,7 +131,7 @@ export function CameraStage({
 
         <OverlayEditorLayer
           quad={quad}
-          visible={showOverlay && (cameraStatus === "ready" || photoFrozen)}
+          visible={cameraStatus === "ready" || photoFrozen}
           cornerEditMode={cornerEditMode}
           activeCorner={activeCorner}
           bindings={bindings}

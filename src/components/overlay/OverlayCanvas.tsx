@@ -19,6 +19,7 @@ interface OverlayCanvasProps {
   template: ProductTemplate;
   color: ColorPreset;
   hidden?: boolean;
+  opacity?: number;
   openingPreview?: OpeningPreviewState;
   environmentLight?: EnvironmentLight;
 }
@@ -31,7 +32,15 @@ interface CanvasSize {
 
 export const OverlayCanvas = forwardRef<HTMLCanvasElement, OverlayCanvasProps>(
   function OverlayCanvas(
-    { quad, template, color, hidden = false, openingPreview, environmentLight },
+    {
+      quad,
+      template,
+      color,
+      hidden = false,
+      opacity = 0.95,
+      openingPreview,
+      environmentLight,
+    },
     forwardedRef,
   ) {
     const canvasRef = useRef<HTMLCanvasElement | null>(null);
@@ -91,10 +100,11 @@ export const OverlayCanvas = forwardRef<HTMLCanvasElement, OverlayCanvasProps>(
         quad,
         template,
         color,
+        opacity,
         openingPreview,
         environmentLight,
       });
-    }, [size, quad, template, color, hidden, openingPreview, environmentLight]);
+    }, [size, quad, template, color, hidden, opacity, openingPreview, environmentLight]);
 
     return (
       <canvas

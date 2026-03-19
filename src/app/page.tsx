@@ -153,7 +153,7 @@ export default function HomePage() {
 
   const [selectedCategory, setSelectedCategory] = useState<ProductCategory>("windows");
   const [selectedTemplateId, setSelectedTemplateId] = useState("window-single-sash");
-  const [selectedColorId, setSelectedColorId] = useState("white");
+  const [selectedColorId, setSelectedColorId] = useState("anthracite");
 
   const [quad, setQuad] = useState<Quad | null>(null);
   const [cornerEditMode, setCornerEditMode] = useState(false);
@@ -464,7 +464,8 @@ export default function HomePage() {
         quad={activeQuad}
         environmentLight={environmentLight}
         openingPreview={openingPreviewState}
-        showOverlay={!beforeMode}
+        showOverlay
+        overlayOpacity={beforeMode ? 0.14 : 0.95}
         cornerEditMode={cornerEditMode}
         activeCorner={activeCorner}
         bindings={bindings}
