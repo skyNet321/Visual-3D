@@ -5,6 +5,7 @@ import type { RefObject } from "react";
 import type { CameraStatus } from "@/hooks/useCamera";
 import type { ColorPreset } from "@/types/colors";
 import type { Quad } from "@/types/geometry";
+import type { OpeningPreviewState } from "@/types/openingPreview";
 import type { ProductTemplate } from "@/types/products";
 import type { PointerBindings } from "@/hooks/useOverlayEditor";
 import { OverlayCanvas } from "@/components/overlay/OverlayCanvas";
@@ -20,6 +21,7 @@ interface CameraStageProps {
   template: ProductTemplate;
   color: ColorPreset;
   quad: Quad | null;
+  openingPreview: OpeningPreviewState;
   showOverlay: boolean;
   cornerEditMode: boolean;
   activeCorner: number | null;
@@ -32,6 +34,7 @@ interface CameraStageProps {
   isAutoAligning: boolean;
   basePhotoDataUrl: string | null;
   onClearBasePhoto: () => void;
+  fullscreen?: boolean;
 }
 
 function statusLabel(status: CameraStatus) {
@@ -60,6 +63,7 @@ export function CameraStage({
   template,
   color,
   quad,
+  openingPreview,
   showOverlay,
   cornerEditMode,
   activeCorner,
@@ -72,6 +76,7 @@ export function CameraStage({
   isAutoAligning,
   basePhotoDataUrl,
   onClearBasePhoto,
+  fullscreen = false,
 }: CameraStageProps) {
   const needsButton =
     cameraStatus === "idle" ||
@@ -82,7 +87,13 @@ export function CameraStage({
   const photoFrozen = Boolean(basePhotoDataUrl);
 
   return (
-    <section className="relative min-h-[55vh] flex-1 overflow-hidden rounded-[26px] border border-[#c4d6eb] bg-[#0f243d] shadow-[0_30px_70px_rgba(3,14,30,0.35)]">
+    <section
+      className={`relative overflow-hidden bg-[#0f243d] ${
+        fullscreen
+          ? "h-full min-h-[100dvh] rounded-none border-0"
+          : "min-h-[55vh] flex-1 rounded-[26px] border border-[#c4d6eb] shadow-[0_30px_70px_rgba(3,14,30,0.35)]"
+      }`}
+    >
       <div ref={stageRef} className="absolute inset-0">
         <video
           ref={videoRef}
@@ -107,6 +118,7 @@ export function CameraStage({
           quad={quad}
           template={template}
           color={color}
+          openingPreview={openingPreview}
           hidden={!showOverlay}
         />
 

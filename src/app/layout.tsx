@@ -1,4 +1,4 @@
-﻿import type { Metadata } from "next";
+﻿import type { Metadata, Viewport } from "next";
 import { Manrope, IBM_Plex_Mono } from "next/font/google";
 import "./globals.css";
 
@@ -19,6 +19,15 @@ export const metadata: Metadata = {
   title: "PVC Visual Configurator AR",
   description:
     "Мобильное веб-приложение для визуализации ПВХ окон и дверей в реальном интерьере.",
+};
+
+export const viewport: Viewport = {
+  width: "device-width",
+  initialScale: 1,
+  maximumScale: 1,
+  userScalable: false,
+  viewportFit: "cover",
+  themeColor: "#0a1d33",
 };
 
 export default function RootLayout({

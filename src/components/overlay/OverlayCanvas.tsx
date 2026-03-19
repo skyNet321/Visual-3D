@@ -9,6 +9,7 @@ import {
 } from "react";
 import type { ColorPreset } from "@/types/colors";
 import type { Quad } from "@/types/geometry";
+import type { OpeningPreviewState } from "@/types/openingPreview";
 import type { ProductTemplate } from "@/types/products";
 import { renderOverlay } from "@/lib/render/overlayRenderer";
 
@@ -17,6 +18,7 @@ interface OverlayCanvasProps {
   template: ProductTemplate;
   color: ColorPreset;
   hidden?: boolean;
+  openingPreview?: OpeningPreviewState;
 }
 
 interface CanvasSize {
@@ -26,7 +28,10 @@ interface CanvasSize {
 }
 
 export const OverlayCanvas = forwardRef<HTMLCanvasElement, OverlayCanvasProps>(
-  function OverlayCanvas({ quad, template, color, hidden = false }, forwardedRef) {
+  function OverlayCanvas(
+    { quad, template, color, hidden = false, openingPreview },
+    forwardedRef,
+  ) {
     const canvasRef = useRef<HTMLCanvasElement | null>(null);
     const [size, setSize] = useState<CanvasSize>({ width: 0, height: 0, dpr: 1 });
 
@@ -84,8 +89,9 @@ export const OverlayCanvas = forwardRef<HTMLCanvasElement, OverlayCanvasProps>(
         quad,
         template,
         color,
+        openingPreview,
       });
-    }, [size, quad, template, color, hidden]);
+    }, [size, quad, template, color, hidden, openingPreview]);
 
     return (
       <canvas
