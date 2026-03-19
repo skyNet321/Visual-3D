@@ -1,0 +1,61 @@
+﻿@import "tailwindcss";
+
+:root {
+  --font-sans-app: var(--font-manrope);
+  --font-mono-app: var(--font-plex-mono);
+  --color-bg: #eff5fc;
+  --color-text: #102a47;
+}
+
+@theme inline {
+  --font-sans: var(--font-sans-app);
+  --font-mono: var(--font-mono-app);
+  --color-background: var(--color-bg);
+  --color-foreground: var(--color-text);
+}
+
+* {
+  box-sizing: border-box;
+}
+
+html,
+body {
+  margin: 0;
+  padding: 0;
+}
+
+body {
+  font-family: var(--font-sans-app), "Segoe UI", "Noto Sans", sans-serif;
+  background: var(--color-bg);
+  color: var(--color-text);
+}
+
+button,
+input,
+textarea,
+select {
+  font: inherit;
+}
+
+button {
+  touch-action: manipulation;
+}
+
+.scrollbar-thin {
+  scrollbar-width: thin;
+  scrollbar-color: #91b0d3 #dce9f8;
+}
+
+.scrollbar-thin::-webkit-scrollbar {
+  height: 6px;
+}
+
+.scrollbar-thin::-webkit-scrollbar-track {
+  background: #dce9f8;
+  border-radius: 999px;
+}
+
+.scrollbar-thin::-webkit-scrollbar-thumb {
+  background: #91b0d3;
+  border-radius: 999px;
+}
