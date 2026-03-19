@@ -58,6 +58,44 @@ function defaultOpeningMode(template: ProductTemplate): InlineOpeningMode {
   return "side";
 }
 
+async function waitForVideoFrame(video: HTMLVideoElement, timeoutMs = 1800) {
+  if (video.videoWidth > 0 && video.videoHeight > 0 && video.readyState >= 2) {
+    return true;
+  }
+
+  return new Promise<boolean>((resolve) => {
+    let resolved = false;
+
+    const done = (value: boolean) => {
+      if (resolved) {
+        return;
+      }
+      resolved = true;
+      cleanup();
+      resolve(value);
+    };
+
+    const onReady = () => {
+      if (video.videoWidth > 0 && video.videoHeight > 0) {
+        done(true);
+      }
+    };
+
+    const timer = window.setTimeout(() => done(false), timeoutMs);
+
+    const cleanup = () => {
+      window.clearTimeout(timer);
+      video.removeEventListener("loadeddata", onReady);
+      video.removeEventListener("canplay", onReady);
+      video.removeEventListener("playing", onReady);
+    };
+
+    video.addEventListener("loadeddata", onReady);
+    video.addEventListener("canplay", onReady);
+    video.addEventListener("playing", onReady);
+  });
+}
+
 export default function HomePage() {
   const stageRef = useRef<HTMLDivElement | null>(null);
   const overlayCanvasRef = useRef<HTMLCanvasElement | null>(null);
@@ -231,9 +269,15 @@ export default function HomePage() {
     }
   };
 
-  const handleCaptureBasePhoto = () => {
+  const handleCaptureBasePhoto = async () => {
     if (!videoRef.current) {
       setInfoMessage("Сначала включите камеру.");
+      return;
+    }
+
+    const ready = await waitForVideoFrame(videoRef.current);
+    if (!ready) {
+      setInfoMessage("Камера еще не готова. Подождите 1-2 секунды и повторите.");
       return;
     }
 
@@ -245,6 +289,7 @@ export default function HomePage() {
     }
 
     setBasePhotoDataUrl(still);
+    setBeforeMode(false);
     setInfoMessage("Фото основы сохранено. Наложите новую конструкцию сверху.");
   };
 
@@ -268,26 +313,30 @@ export default function HomePage() {
       await new Promise((resolve) => requestAnimationFrame(() => resolve(null)));
     }
 
-    const preview = await captureCompositePreview({
-      videoElement: videoRef.current,
-      overlayCanvas: overlayCanvasRef.current,
-      template: selectedTemplate,
-      color: selectedColor,
-      companyName: COMPANY_NAME,
-      backgroundDataUrl: basePhotoDataUrl,
-    });
+    try {
+      const preview = await captureCompositePreview({
+        videoElement: videoRef.current,
+        overlayCanvas: overlayCanvasRef.current,
+        template: selectedTemplate,
+        color: selectedColor,
+        companyName: COMPANY_NAME,
+        backgroundDataUrl: basePhotoDataUrl,
+      });
 
-    setCapturedPreview(preview);
+      setCapturedPreview(preview);
 
-    savePreviewLocally({
-      id: crypto.randomUUID(),
-      dataUrl: preview,
-      modelName: selectedTemplate.name,
-      colorName: selectedColor.name,
-      createdAt: new Date().toISOString(),
-    });
+      savePreviewLocally({
+        id: crypto.randomUUID(),
+        dataUrl: preview,
+        modelName: selectedTemplate.name,
+        colorName: selectedColor.name,
+        createdAt: new Date().toISOString(),
+      });
 
-    setInfoMessage("Результат сохранен. Можно отправить заявку или поделиться.");
+      setInfoMessage("Результат сохранен. Можно отправить заявку или поделиться.");
+    } catch {
+      setInfoMessage("Не удалось сохранить снимок. Попробуйте еще раз.");
+    }
   };
 
   const handleShareWeb = async () => {
@@ -382,11 +431,6 @@ export default function HomePage() {
         fullscreen
       />
 
-      <div className="pointer-events-none absolute left-3 top-3 z-[70] rounded-2xl border border-[rgba(176,207,240,0.5)] bg-[rgba(7,20,37,0.68)] px-3 py-2 text-xs">
-        <p className="font-semibold tracking-wide text-[#d8ebff]">PVC Visual Configurator AR</p>
-        <p className="text-[11px] text-[#b9d2ed]">Режим: камера + AR наложение</p>
-      </div>
-
       {capturedPreview ? (
         <button
           type="button"
@@ -438,8 +482,8 @@ export default function HomePage() {
           basePhotoActive={Boolean(basePhotoDataUrl)}
           onClearBasePhoto={handleClearBasePhoto}
           onCapture={handleCapture}
-          captureBaseDisabled={cameraStatus !== "ready"}
-          captureResultDisabled={cameraStatus !== "ready" && !basePhotoDataUrl}
+          captureBaseDisabled={false}
+          captureResultDisabled={false}
           onOpen3D={() => setShow3DModal(true)}
           onResetPlacement={centerOverlay}
           openingPreviewEnabled={openingPreviewEnabled}

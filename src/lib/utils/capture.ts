@@ -48,7 +48,9 @@ export async function captureCompositePreview({
   companyName = "PVC Visual Configurator AR",
   backgroundDataUrl,
 }: CaptureOptions): Promise<string> {
-  const backgroundImage = backgroundDataUrl ? await loadImage(backgroundDataUrl) : null;
+  const backgroundImage = backgroundDataUrl
+    ? await loadImage(backgroundDataUrl).catch(() => null)
+    : null;
 
   const width =
     backgroundImage?.naturalWidth ||
