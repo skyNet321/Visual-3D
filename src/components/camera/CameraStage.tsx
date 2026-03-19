@@ -156,7 +156,7 @@ export function CameraStage({
           }`}
           onClick={onToggleBeforeAfter}
         >
-          {beforeMode ? "Режим: До" : "Режим: После"}
+          {beforeMode ? "Показать новую дверь" : "Скрыть новую (режим До)"}
         </button>
 
         <button
@@ -190,6 +190,12 @@ export function CameraStage({
           </button>
         ) : null}
       </div>
+
+      {beforeMode ? (
+        <div className="pointer-events-none absolute left-3 right-3 top-[84px] z-40 rounded-xl border border-[rgba(248,210,132,0.6)] bg-[rgba(43,27,8,0.65)] px-3 py-2 text-[11px] font-semibold text-[#ffe4b8]">
+          Новая конструкция скрыта. Нажмите «Показать новую дверь».
+        </div>
+      ) : null}
 
       {needsButton ? (
         <div className="absolute inset-0 z-50 flex flex-col items-center justify-center bg-[rgba(5,14,27,0.72)] px-6 text-center">

@@ -622,7 +622,11 @@ export function renderOverlay({
 
   drawPolygon(context, outer);
   context.lineWidth = frameStroke;
-  context.strokeStyle = "rgba(248, 252, 255, 0.48)";
+  context.strokeStyle = "rgba(245, 251, 255, 0.62)";
+  context.stroke();
+
+  context.lineWidth = Math.max(1.1, frameStroke * 0.22);
+  context.strokeStyle = "rgba(34, 159, 255, 0.46)";
   context.stroke();
 
   context.restore();

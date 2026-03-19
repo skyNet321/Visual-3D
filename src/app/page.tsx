@@ -42,6 +42,40 @@ interface ViewportSize {
   height: number;
 }
 
+function quadBounds(quad: Quad) {
+  const xs = quad.map((point) => point.x);
+  const ys = quad.map((point) => point.y);
+
+  return {
+    minX: Math.min(...xs),
+    maxX: Math.max(...xs),
+    minY: Math.min(...ys),
+    maxY: Math.max(...ys),
+  };
+}
+
+function isQuadMostlyVisible(quad: Quad, viewport: ViewportSize) {
+  if (!viewport.width || !viewport.height) {
+    return false;
+  }
+
+  const bounds = quadBounds(quad);
+  const quadWidth = Math.max(1, bounds.maxX - bounds.minX);
+  const quadHeight = Math.max(1, bounds.maxY - bounds.minY);
+
+  const overlapX = Math.max(
+    0,
+    Math.min(bounds.maxX, viewport.width) - Math.max(bounds.minX, 0),
+  );
+  const overlapY = Math.max(
+    0,
+    Math.min(bounds.maxY, viewport.height) - Math.max(bounds.minY, 0),
+  );
+
+  const visibilityRatio = (overlapX * overlapY) / (quadWidth * quadHeight);
+  return visibilityRatio >= 0.3;
+}
+
 function defaultOpeningMode(template: ProductTemplate): InlineOpeningMode {
   if (template.openingStyle === "tilt-and-turn") {
     return "tilt";
@@ -239,6 +273,19 @@ export default function HomePage() {
     setInfoMessage("Позиция оверлея сброшена.");
   };
 
+  const centerOverlayForTemplate = (template: ProductTemplate) => {
+    if (!viewport.width || !viewport.height) {
+      return;
+    }
+
+    const ratio = aspectRatioFromTemplateSize(
+      template.defaultProportions.width,
+      template.defaultProportions.height,
+    );
+
+    setQuad(createCenteredQuad(viewport, ratio));
+  };
+
   const handleAutoAlign = async () => {
     if (!videoRef.current || !viewport.width || !viewport.height) {
       return;
@@ -289,6 +336,7 @@ export default function HomePage() {
     }
 
     setBasePhotoDataUrl(still);
+    centerOverlayForTemplate(selectedTemplate);
     setBeforeMode(false);
     setInfoMessage("Фото основы сохранено. Наложите новую конструкцию сверху.");
   };
@@ -467,6 +515,21 @@ export default function HomePage() {
               setSelectedTemplateId(nextTemplate.id);
             }
             setOpeningMode(defaultOpeningMode(nextTemplate));
+            setQuad((previous) => {
+              if (previous && isQuadMostlyVisible(previous, viewport)) {
+                return previous;
+              }
+
+              if (!viewport.width || !viewport.height) {
+                return previous;
+              }
+
+              const ratio = aspectRatioFromTemplateSize(
+                nextTemplate.defaultProportions.width,
+                nextTemplate.defaultProportions.height,
+              );
+              return createCenteredQuad(viewport, ratio);
+            });
           }}
           templates={templates}
           selectedTemplateId={selectedTemplate.id}
@@ -474,6 +537,21 @@ export default function HomePage() {
             setSelectedTemplateId(templateId);
             const nextTemplate = getTemplateById(templateId) ?? selectedTemplate;
             setOpeningMode(defaultOpeningMode(nextTemplate));
+            setQuad((previous) => {
+              if (previous && isQuadMostlyVisible(previous, viewport)) {
+                return previous;
+              }
+
+              if (!viewport.width || !viewport.height) {
+                return previous;
+              }
+
+              const ratio = aspectRatioFromTemplateSize(
+                nextTemplate.defaultProportions.width,
+                nextTemplate.defaultProportions.height,
+              );
+              return createCenteredQuad(viewport, ratio);
+            });
           }}
           colors={COLOR_PRESETS}
           selectedColorId={selectedColor.id}
