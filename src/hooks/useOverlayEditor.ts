@@ -7,6 +7,7 @@ import {
   clampQuadToBounds,
   cloneQuad,
   findClosestCorner,
+  getCentroid,
   transformQuadByPinchRotate,
   translateQuad,
   type Size2D,
@@ -210,6 +211,30 @@ export function useOverlayEditor({
       }
     },
     onPointerUp: (event) => {
+      const releasePoint = getRelativePoint(event);
+      const gesture = gestureRef.current;
+
+      if (
+        gesture.mode === "drag" &&
+        gesture.pointerId === event.pointerId &&
+        !cornerEditMode
+      ) {
+        const moveDistance = Math.hypot(
+          releasePoint.x - gesture.startPoint.x,
+          releasePoint.y - gesture.startPoint.y,
+        );
+
+        if (moveDistance < 10) {
+          const centroid = getCentroid(gesture.startQuad);
+          const moved = translateQuad(
+            gesture.startQuad,
+            releasePoint.x - centroid.x,
+            releasePoint.y - centroid.y,
+          );
+          onQuadChange(clampQuadToBounds(moved, viewport));
+        }
+      }
+
       pointersRef.current.delete(event.pointerId);
 
       if (pointersRef.current.size === 0) {
