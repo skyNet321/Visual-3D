@@ -220,6 +220,10 @@ export default function HomePage() {
   }, [quad, selectedTemplate, viewport]);
 
   useEffect(() => {
+    if (!isMobile && !allowDesktopPreview) {
+      return;
+    }
+
     const element = stageRef.current;
     if (!element) {
       return;
@@ -237,8 +241,17 @@ export default function HomePage() {
     const observer = new ResizeObserver(() => update());
     observer.observe(element);
 
-    return () => observer.disconnect();
-  }, []);
+    const raf = window.requestAnimationFrame(update);
+    window.addEventListener("orientationchange", update);
+    window.addEventListener("resize", update);
+
+    return () => {
+      observer.disconnect();
+      window.cancelAnimationFrame(raf);
+      window.removeEventListener("orientationchange", update);
+      window.removeEventListener("resize", update);
+    };
+  }, [isMobile, allowDesktopPreview]);
 
   useEffect(() => {
     if (!infoMessage) {
