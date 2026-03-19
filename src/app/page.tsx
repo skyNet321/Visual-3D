@@ -23,7 +23,11 @@ import {
 } from "@/lib/data/productTemplates";
 import { suggestOpeningQuad } from "@/lib/vision/assistedDetection";
 import { captureCompositePreview, captureStillFromVideo } from "@/lib/utils/capture";
-import { aspectRatioFromTemplateSize, createCenteredQuad } from "@/lib/utils/geometry";
+import {
+  aspectRatioFromTemplateSize,
+  createCenteredQuad,
+  getCentroid,
+} from "@/lib/utils/geometry";
 import {
   buildEmailShareUrl,
   buildWhatsAppShareUrl,
@@ -33,7 +37,7 @@ import { savePreviewLocally } from "@/lib/utils/storage";
 import type { LeadPayload } from "@/types/leads";
 import type { OpeningPreviewState, InlineOpeningMode } from "@/types/openingPreview";
 import type { ProductCategory, ProductTemplate } from "@/types/products";
-import type { Quad } from "@/types/geometry";
+import type { Point2D, Quad } from "@/types/geometry";
 
 const COMPANY_NAME = process.env.NEXT_PUBLIC_COMPANY_NAME || "PVC Visual Configurator AR";
 
@@ -133,6 +137,7 @@ async function waitForVideoFrame(video: HTMLVideoElement, timeoutMs = 1800) {
 export default function HomePage() {
   const stageRef = useRef<HTMLDivElement | null>(null);
   const overlayCanvasRef = useRef<HTMLCanvasElement | null>(null);
+  const basePhotoImageRef = useRef<HTMLImageElement | null>(null);
 
   const isMobile = useIsMobileDevice();
   const [allowDesktopPreview] = useState<boolean>(() => {
@@ -254,6 +259,26 @@ export default function HomePage() {
   }, [isMobile, allowDesktopPreview]);
 
   useEffect(() => {
+    if (!basePhotoDataUrl) {
+      basePhotoImageRef.current = null;
+      return;
+    }
+
+    const image = new window.Image();
+    image.onload = () => {
+      basePhotoImageRef.current = image;
+    };
+    image.onerror = () => {
+      basePhotoImageRef.current = null;
+    };
+    image.src = basePhotoDataUrl;
+
+    return () => {
+      basePhotoImageRef.current = null;
+    };
+  }, [basePhotoDataUrl]);
+
+  useEffect(() => {
     if (!infoMessage) {
       return;
     }
@@ -262,6 +287,44 @@ export default function HomePage() {
     return () => window.clearTimeout(timeout);
   }, [infoMessage]);
 
+  const getDetectionSource = () => {
+    const photoImage = basePhotoImageRef.current;
+    if (photoImage && photoImage.complete && photoImage.naturalWidth > 0) {
+      return photoImage;
+    }
+
+    const video = videoRef.current;
+    if (video && video.videoWidth > 0 && video.videoHeight > 0) {
+      return video;
+    }
+
+    return null;
+  };
+
+  const detectOpeningAtPoint = (focusPoint?: Point2D) => {
+    if (!viewport.width || !viewport.height) {
+      return null;
+    }
+
+    const source = getDetectionSource();
+    if (!source) {
+      return null;
+    }
+
+    const ratio = aspectRatioFromTemplateSize(
+      selectedTemplate.defaultProportions.width,
+      selectedTemplate.defaultProportions.height,
+    );
+
+    return suggestOpeningQuad({
+      source,
+      viewportWidth: viewport.width,
+      viewportHeight: viewport.height,
+      expectedAspectRatio: ratio,
+      focusPoint,
+    });
+  };
+
   const { activeCorner, bindings } = useOverlayEditor({
     quad: activeQuad,
     onQuadChange: setQuad,
@@ -269,6 +332,21 @@ export default function HomePage() {
     viewport: {
       width: viewport.width || 1,
       height: viewport.height || 1,
+    },
+    onTapPlace: (point) => {
+      if (!FEATURES.assistedDetection) {
+        return null;
+      }
+
+      const detection = detectOpeningAtPoint(point);
+
+      if (detection?.method === "edge" && detection.confidence >= 1.08) {
+        setBeforeMode(false);
+        setInfoMessage("Контур проема найден по касанию. Проверьте углы.");
+        return detection.quad;
+      }
+
+      return null;
     },
   });
 
@@ -300,27 +378,26 @@ export default function HomePage() {
   };
 
   const handleAutoAlign = async () => {
-    if (!videoRef.current || !viewport.width || !viewport.height) {
+    if (!viewport.width || !viewport.height) {
       return;
     }
-
-    const ratio = aspectRatioFromTemplateSize(
-      selectedTemplate.defaultProportions.width,
-      selectedTemplate.defaultProportions.height,
-    );
 
     setAligning(true);
     await new Promise((resolve) => window.setTimeout(resolve, 30));
 
-    const detection = suggestOpeningQuad({
-      video: videoRef.current,
-      viewportWidth: viewport.width,
-      viewportHeight: viewport.height,
-      expectedAspectRatio: ratio,
-    });
+    const focusPoint = activeQuad
+      ? getCentroid(activeQuad)
+      : { x: viewport.width / 2, y: viewport.height / 2 };
+
+    const detection = detectOpeningAtPoint(focusPoint);
+    setAligning(false);
+
+    if (!detection) {
+      setInfoMessage("Нет кадра для автодетекции. Включите камеру или сделайте фото основы.");
+      return;
+    }
 
     setQuad(detection.quad);
-    setAligning(false);
 
     if (detection.method === "edge") {
       setInfoMessage("Проем найден автоматически. Подправьте углы при необходимости.");
@@ -351,7 +428,7 @@ export default function HomePage() {
     setBasePhotoDataUrl(still);
     centerOverlayForTemplate(selectedTemplate);
     setBeforeMode(false);
-    setInfoMessage("Фото основы сохранено. Наложите новую конструкцию сверху.");
+    setInfoMessage("Фото сохранено. Коснитесь проема, чтобы автоопределить углы и размер.");
   };
 
   const handleClearBasePhoto = () => {

@@ -43,6 +43,7 @@ interface UseOverlayEditorOptions {
   onQuadChange: (quad: Quad) => void;
   cornerEditMode: boolean;
   viewport: Size2D;
+  onTapPlace?: (point: Point2D, startQuad: Quad) => Quad | null;
 }
 
 export interface PointerBindings {
@@ -65,6 +66,7 @@ export function useOverlayEditor({
   onQuadChange,
   cornerEditMode,
   viewport,
+  onTapPlace,
 }: UseOverlayEditorOptions) {
   const [activeCorner, setActiveCorner] = useState<number | null>(null);
 
@@ -225,13 +227,18 @@ export function useOverlayEditor({
         );
 
         if (moveDistance < 10) {
-          const centroid = getCentroid(gesture.startQuad);
-          const moved = translateQuad(
-            gesture.startQuad,
-            releasePoint.x - centroid.x,
-            releasePoint.y - centroid.y,
-          );
-          onQuadChange(clampQuadToBounds(moved, viewport));
+          const tapPlacedQuad = onTapPlace?.(releasePoint, gesture.startQuad) ?? null;
+          if (tapPlacedQuad) {
+            onQuadChange(clampQuadToBounds(tapPlacedQuad, viewport));
+          } else {
+            const centroid = getCentroid(gesture.startQuad);
+            const moved = translateQuad(
+              gesture.startQuad,
+              releasePoint.x - centroid.x,
+              releasePoint.y - centroid.y,
+            );
+            onQuadChange(clampQuadToBounds(moved, viewport));
+          }
         }
       }
 
