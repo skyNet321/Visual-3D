@@ -39,6 +39,18 @@ function fillPolygon(
   context.fill();
 }
 
+function strokePolygon(
+  context: CanvasRenderingContext2D,
+  points: Point2D[],
+  strokeStyle: string | CanvasGradient,
+  lineWidth: number,
+) {
+  drawPolygon(context, points);
+  context.lineWidth = lineWidth;
+  context.strokeStyle = strokeStyle;
+  context.stroke();
+}
+
 function panelPolygon(
   quad: Quad,
   left: number,
@@ -225,29 +237,87 @@ function drawPanelHandle(
   const sideA = hingeSide === "left" ? tr : tl;
   const sideB = hingeSide === "left" ? br : bl;
 
-  const handleTop = pointLerp(sideA, sideB, 0.36);
-  const handleBottom = pointLerp(sideA, sideB, 0.64);
+  const mainTop = pointLerp(sideA, sideB, 0.33);
+  const mainBottom = pointLerp(sideA, sideB, 0.66);
+  const axis = normalize(pointSub(mainBottom, mainTop));
+  const perp = { x: -axis.y, y: axis.x };
+  const projection = pointScale(perp, lineWidth * 0.6);
+
+  const bodyStart = pointAdd(mainTop, projection);
+  const bodyEnd = pointAdd(mainBottom, projection);
+  const noseEnd = pointAdd(bodyEnd, pointScale(perp, lineWidth * 0.58));
 
   const metallic = context.createLinearGradient(
-    handleTop.x,
-    handleTop.y,
-    handleBottom.x,
-    handleBottom.y,
+    bodyStart.x,
+    bodyStart.y,
+    bodyEnd.x,
+    bodyEnd.y,
   );
-  metallic.addColorStop(0, "rgba(244, 247, 252, 0.95)");
-  metallic.addColorStop(0.5, "rgba(182, 193, 206, 0.98)");
-  metallic.addColorStop(1, "rgba(117, 129, 144, 0.98)");
+  metallic.addColorStop(0, "rgba(246, 248, 252, 0.96)");
+  metallic.addColorStop(0.46, "rgba(194, 204, 216, 0.98)");
+  metallic.addColorStop(1, "rgba(112, 122, 137, 0.98)");
 
   context.save();
-  context.beginPath();
-  context.moveTo(handleTop.x, handleTop.y);
-  context.lineTo(handleBottom.x, handleBottom.y);
   context.lineCap = "round";
+  context.shadowColor = "rgba(0, 0, 0, 0.28)";
+  context.shadowBlur = Math.max(3, lineWidth * 0.9);
+  context.shadowOffsetX = 0.7;
+  context.shadowOffsetY = 1.2;
+
+  context.beginPath();
+  context.moveTo(bodyStart.x, bodyStart.y);
+  context.lineTo(bodyEnd.x, bodyEnd.y);
   context.lineWidth = lineWidth;
   context.strokeStyle = metallic;
-  context.shadowColor = "rgba(0, 0, 0, 0.45)";
-  context.shadowBlur = Math.max(2, lineWidth * 0.8);
   context.stroke();
+
+  context.beginPath();
+  context.moveTo(bodyEnd.x, bodyEnd.y);
+  context.lineTo(noseEnd.x, noseEnd.y);
+  context.lineWidth = Math.max(1.6, lineWidth * 0.62);
+  context.strokeStyle = "rgba(154, 166, 183, 0.98)";
+  context.stroke();
+
+  const capRadius = Math.max(1.8, lineWidth * 0.28);
+  context.beginPath();
+  context.arc(bodyStart.x, bodyStart.y, capRadius, 0, Math.PI * 2);
+  context.fillStyle = "rgba(210, 220, 232, 0.95)";
+  context.fill();
+  context.restore();
+}
+
+function drawPanelHinges(
+  context: CanvasRenderingContext2D,
+  points: Point2D[],
+  hingeSide: "left" | "right",
+  scale: number,
+) {
+  const [tl, tr, br, bl] = points;
+  const sideA = hingeSide === "left" ? tl : tr;
+  const sideB = hingeSide === "left" ? bl : br;
+  const edgeDir = normalize(pointSub(sideB, sideA));
+  const perp = { x: -edgeDir.y, y: edgeDir.x };
+  const sign = hingeSide === "left" ? 1 : -1;
+
+  const plateDepth = Math.max(2, scale * 0.85);
+  const plateLength = Math.max(5, scale * 1.8);
+  const anchorFractions = [0.16, 0.48, 0.8];
+
+  context.save();
+  for (const fraction of anchorFractions) {
+    const center = pointLerp(sideA, sideB, fraction);
+    const p0 = pointAdd(center, pointScale(edgeDir, -plateLength / 2));
+    const p1 = pointAdd(center, pointScale(edgeDir, plateLength / 2));
+    const p2 = pointAdd(p1, pointScale(perp, sign * plateDepth));
+    const p3 = pointAdd(p0, pointScale(perp, sign * plateDepth));
+
+    const gradient = context.createLinearGradient(p0.x, p0.y, p2.x, p2.y);
+    gradient.addColorStop(0, "rgba(218, 225, 235, 0.9)");
+    gradient.addColorStop(1, "rgba(106, 118, 134, 0.95)");
+
+    fillPolygon(context, [p0, p1, p2, p3], gradient);
+    strokePolygon(context, [p0, p1, p2, p3], "rgba(45, 53, 63, 0.42)", Math.max(0.7, scale * 0.14));
+  }
   context.restore();
 }
 
@@ -273,14 +343,34 @@ function drawGlass(
     bounds.minX,
     bounds.minY,
     bounds.maxX,
-    bounds.maxY,
+    bounds.minY + height * 0.95,
   );
-  const blueBias = clamp(0.74 - warmth * 0.1 + (1 - luma) * 0.08, 0.6, 0.9);
-  baseGradient.addColorStop(0, `rgba(186, 216, 242, ${glassOpacity + 0.12})`);
-  baseGradient.addColorStop(0.5, `rgba(${Math.round(105 * blueBias)}, ${Math.round(147 * blueBias)}, ${Math.round(183 * blueBias)}, ${glassOpacity + 0.02})`);
-  baseGradient.addColorStop(1, `rgba(58, 92, 122, ${glassOpacity - 0.03})`);
+  const cool = clamp(0.66 + (1 - warmth) * 0.18, 0.62, 0.88);
+  const highAlpha = clamp(glassOpacity + 0.2, 0.26, 0.62);
+  const midAlpha = clamp(glassOpacity + 0.06, 0.16, 0.48);
+  const lowAlpha = clamp(glassOpacity - 0.04, 0.08, 0.36);
+
+  baseGradient.addColorStop(0, `rgba(236, 242, 250, ${highAlpha})`);
+  baseGradient.addColorStop(
+    0.56,
+    `rgba(${Math.round(116 * cool)}, ${Math.round(132 * cool)}, ${Math.round(154 * cool)}, ${midAlpha})`,
+  );
+  baseGradient.addColorStop(1, `rgba(44, 55, 70, ${lowAlpha})`);
 
   context.fillStyle = baseGradient;
+  context.fillRect(bounds.minX, bounds.minY, width, height);
+
+  const horizonY = bounds.minY + height * 0.54;
+  const horizonGradient = context.createLinearGradient(
+    bounds.minX,
+    horizonY - height * 0.16,
+    bounds.minX,
+    horizonY + height * 0.18,
+  );
+  horizonGradient.addColorStop(0, "rgba(248, 250, 253, 0.08)");
+  horizonGradient.addColorStop(0.48, "rgba(230, 236, 244, 0.24)");
+  horizonGradient.addColorStop(1, "rgba(36, 44, 56, 0.12)");
+  context.fillStyle = horizonGradient;
   context.fillRect(bounds.minX, bounds.minY, width, height);
 
   const reflFromLeft = direction <= 0;
@@ -288,10 +378,10 @@ function drawGlass(
     reflFromLeft ? bounds.minX : bounds.maxX,
     bounds.minY,
     reflFromLeft ? bounds.maxX : bounds.minX,
-    bounds.minY + height * (0.42 + Math.abs(direction) * 0.16),
+    bounds.minY + height * (0.34 + Math.abs(direction) * 0.18),
   );
 
-  const reflAlpha = clamp(0.22 + luma * 0.24 + (1 - environment.contrast) * 0.08, 0.2, 0.56);
+  const reflAlpha = clamp(0.18 + luma * 0.2 + (1 - environment.contrast) * 0.08, 0.16, 0.5);
   reflection.addColorStop(0, `rgba(255, 255, 255, ${reflAlpha})`);
   reflection.addColorStop(0.36, `rgba(255, 255, 255, ${reflAlpha * 0.45})`);
   reflection.addColorStop(1, "rgba(255, 255, 255, 0.02)");
@@ -299,16 +389,35 @@ function drawGlass(
   context.fillStyle = reflection;
   context.fillRect(bounds.minX, bounds.minY, width, height * 0.72);
 
-  context.globalAlpha = 0.12 + Math.abs(direction) * 0.08;
-  for (let index = 0; index < 3; index += 1) {
-    const factor = index / 3;
-    const x = bounds.minX + width * (0.16 + factor * 0.28);
-    const streak = context.createLinearGradient(x, bounds.minY, x + width * 0.1, bounds.maxY);
-    streak.addColorStop(0, "rgba(255, 255, 255, 0.6)");
+  context.globalAlpha = 0.1 + Math.abs(direction) * 0.07;
+  for (let index = 0; index < 4; index += 1) {
+    const factor = index / 4;
+    const x = bounds.minX + width * (0.12 + factor * 0.22);
+    const streak = context.createLinearGradient(
+      x,
+      bounds.minY,
+      x + width * 0.12,
+      bounds.maxY,
+    );
+    streak.addColorStop(0, "rgba(255, 255, 255, 0.46)");
     streak.addColorStop(1, "rgba(255, 255, 255, 0)");
     context.fillStyle = streak;
-    context.fillRect(x, bounds.minY, width * 0.1, height);
+    context.fillRect(x, bounds.minY, width * 0.12, height);
   }
+
+  const vignette = context.createRadialGradient(
+    bounds.minX + width * 0.52,
+    bounds.minY + height * 0.44,
+    width * 0.12,
+    bounds.minX + width * 0.5,
+    bounds.minY + height * 0.5,
+    Math.max(width, height) * 0.9,
+  );
+  vignette.addColorStop(0, "rgba(255, 255, 255, 0)");
+  vignette.addColorStop(1, "rgba(16, 22, 30, 0.22)");
+  context.globalAlpha = 1;
+  context.fillStyle = vignette;
+  context.fillRect(bounds.minX, bounds.minY, width, height);
 
   context.restore();
 }
@@ -430,7 +539,6 @@ export function renderOverlay({
   const frameDark = withAdaptiveShade(color.hex, -darkBoost);
   const frameMedium = withAdaptiveShade(color.hex, -darkBoost * 0.38);
   const frameLight = withAdaptiveShade(color.hex, lightBoost);
-  const frameHighlight = withAdaptiveShade(color.accentHex, lightBoost + 0.12);
 
   const openingIndexes = openingPanelIndexes(template, openingPreview);
   const progress = clamp(openingPreview?.progress ?? 0, 0, 1);
@@ -465,14 +573,29 @@ export function renderOverlay({
   drawFrameSegment(context, rightStrip, withAdaptiveShade(color.hex, rightLight), frameDark, 0.95);
 
   context.save();
+  strokePolygon(
+    context,
+    outer,
+    "rgba(255, 255, 255, 0.42)",
+    Math.max(1.1, frameStroke * 0.28),
+  );
+  strokePolygon(
+    context,
+    outer,
+    "rgba(32, 42, 55, 0.22)",
+    Math.max(0.9, frameStroke * 0.18),
+  );
+  context.restore();
+
+  context.save();
   drawPolygon(context, inner);
   const cavity = context.createLinearGradient(inner[0].x, inner[0].y, inner[2].x, inner[2].y);
-  cavity.addColorStop(0, "rgba(64, 88, 111, 0.22)");
-  cavity.addColorStop(1, "rgba(16, 24, 33, 0.3)");
+  cavity.addColorStop(0, "rgba(56, 74, 92, 0.3)");
+  cavity.addColorStop(1, "rgba(14, 20, 28, 0.34)");
   context.fillStyle = cavity;
   context.fill();
   context.lineWidth = Math.max(1.2, frameStroke * 0.35);
-  context.strokeStyle = "rgba(6, 10, 16, 0.3)";
+  context.strokeStyle = "rgba(8, 12, 18, 0.34)";
   context.stroke();
   context.restore();
 
@@ -541,8 +664,20 @@ export function renderOverlay({
     const panelBottom = [panelOuter[2], panelOuter[3], panelInner[3], panelInner[2]];
     const panelLeft = [panelOuter[3], panelOuter[0], panelInner[0], panelInner[3]];
 
-    drawFrameSegment(context, panelTop, frameHighlight, frameMedium, 0.96);
-    drawFrameSegment(context, panelLeft, frameHighlight, frameMedium, 0.92);
+    drawFrameSegment(
+      context,
+      panelTop,
+      withAdaptiveShade(color.accentHex, 0.12 + lightBoost * 0.4),
+      frameMedium,
+      0.97,
+    );
+    drawFrameSegment(
+      context,
+      panelLeft,
+      withAdaptiveShade(color.accentHex, 0.1 + leftLight * 0.35),
+      frameMedium,
+      0.93,
+    );
     drawFrameSegment(context, panelBottom, frameMedium, frameDark, 0.95);
     drawFrameSegment(context, panelRight, frameMedium, frameDark, 0.95);
 
@@ -557,11 +692,17 @@ export function renderOverlay({
     context.restore();
 
     if (panel.kind === "opening") {
+      drawPanelHinges(
+        context,
+        panelInner,
+        panel.hingeSide ?? "left",
+        Math.max(2, frameStroke * 0.42),
+      );
       drawPanelHandle(
         context,
         panelInner,
         panel.hingeSide ?? "left",
-        Math.max(2, frameStroke * 0.5),
+        Math.max(2, frameStroke * 0.54),
       );
     }
 
@@ -613,21 +754,25 @@ export function renderOverlay({
     1000;
 
   if (color.id === "white" || color.id === "anthracite") {
-    drawMicroTexture(context, outer, color.id === "white" ? 0.58 : 0.86, stableSeed);
+    drawMicroTexture(context, outer, color.id === "white" ? 0.22 : 0.42, stableSeed);
   }
 
   if (color.id === "walnut" || color.id === "golden-oak" || color.id === "dark-oak") {
     drawWoodTexture(context, outer, 0.05);
   }
 
-  drawPolygon(context, outer);
-  context.lineWidth = frameStroke;
-  context.strokeStyle = "rgba(245, 251, 255, 0.62)";
-  context.stroke();
-
-  context.lineWidth = Math.max(1.1, frameStroke * 0.22);
-  context.strokeStyle = "rgba(34, 159, 255, 0.46)";
-  context.stroke();
+  strokePolygon(
+    context,
+    outer,
+    "rgba(244, 248, 252, 0.58)",
+    Math.max(1.2, frameStroke * 0.8),
+  );
+  strokePolygon(
+    context,
+    outer,
+    "rgba(40, 50, 62, 0.22)",
+    Math.max(0.9, frameStroke * 0.28),
+  );
 
   context.restore();
 }

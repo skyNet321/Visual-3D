@@ -4,9 +4,9 @@ export const COLOR_PRESETS: ColorPreset[] = [
   {
     id: "white",
     name: "Белый",
-    hex: "#f4f5f7",
-    shadowHex: "#b8bec8",
-    accentHex: "#e4e8ef",
+    hex: "#f8f8f7",
+    shadowHex: "#b5bcc6",
+    accentHex: "#ffffff",
   },
   {
     id: "anthracite",

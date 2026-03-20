@@ -30,15 +30,17 @@ export function OverlayEditorLayer({
     >
       {quad && visible ? (
         <>
-          <svg className="pointer-events-none absolute inset-0 h-full w-full">
-            <polygon
-              points={buildPolygonPath(quad)}
-              fill="rgba(97, 167, 255, 0.08)"
-              stroke={cornerEditMode ? "rgba(255, 211, 123, 0.96)" : "rgba(116, 196, 255, 0.92)"}
-              strokeWidth={2}
-              strokeDasharray={cornerEditMode ? "5 5" : "10 6"}
-            />
-          </svg>
+          {cornerEditMode ? (
+            <svg className="pointer-events-none absolute inset-0 h-full w-full">
+              <polygon
+                points={buildPolygonPath(quad)}
+                fill="rgba(255, 206, 117, 0.1)"
+                stroke="rgba(255, 211, 123, 0.96)"
+                strokeWidth={2}
+                strokeDasharray="5 5"
+              />
+            </svg>
+          ) : null}
 
           {cornerEditMode
             ? quad.map((point, index) => (
